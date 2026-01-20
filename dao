@@ -1,0 +1,102 @@
+from DB_connect import DBConnect
+
+
+class Dao:
+    def __init__(self):
+        pass
+
+    def read_nodes(self, durata):
+        """
+        Legge gli album che hanno durata totale (somma delle tracce) > durata (in minuti).
+
+        Output: lista di dizionari, ognuno con:
+        - album_id
+        - title
+        - durata (minuti)
+        """
+        cnx = DBConnect.get_connection()
+        results = []
+
+        # Se la connessione fallisce, ritorno lista vuota
+        if cnx is None:
+            print("Errore di connessione")
+            return []
+
+        # dictionary=True => ogni riga è un dizionario (chiave = nome colonna)
+        cursor = cnx.cursor(dictionary=True)
+
+        # SUM(t.milliseconds)/60000 => conversione da millisecondi a minuti
+        query = (
+            "SELECT t.album_id, a.title, SUM(t.milliseconds)/60000 AS durata "
+            "FROM track t, album a "
+            "WHERE t.album_id = a.id "
+            "GROUP BY t.album_id, a.title "
+            "HAVING SUM(t.milliseconds)/60000 > %s;"
+        )
+
+        try:
+            cursor.execute(query, (durata,))
+            rows = cursor.fetchall()
+
+            # Copio i dizionari in una lista
+            for row in rows:
+                results.append(row)
+
+        except Exception as e:
+            print(f"Errore nella esecuzione della query (read_nodes): {e}")
+
+        finally:
+            cursor.close()
+            cnx.close()
+
+        return results
+
+    def read_edges(self):
+        """
+        Ritorna le coppie (album_id1, album_id2) tali che almeno una traccia di ciascun album
+        compaia nella stessa playlist.
+
+        Output: lista di tuple (a1, a2)
+        """
+        cnx = DBConnect.get_connection()
+        if cnx is None:
+            print("Errore di connessione")
+            return []
+
+        # dictionary=True per leggere con r["a1"], r["a2"]
+        cursor = cnx.cursor(dictionary=True)
+
+        # Logica:
+        # - p1 e p2 sono due righe della stessa playlist
+        # - t1 e t2 sono le tracce collegate
+        # - prendo gli album delle due tracce
+        # - uso DISTINCT per evitare duplicati
+        # - t1.album_id < t2.album_id per non avere sia (A,B) che (B,A)
+        query = (
+            "SELECT DISTINCT t1.album_id AS a1, t2.album_id AS a2 "
+            "FROM playlist_track p1, playlist_track p2, track t1, track t2 "
+            "WHERE p1.playlist_id = p2.playlist_id "
+            "AND p1.track_id < p2.track_id "
+            "AND t1.id = p1.track_id "
+            "AND t2.id = p2.track_id "
+            "AND t1.album_id < t2.album_id;"
+        )
+
+        try:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+            # Trasformo la lista di dict in lista di tuple
+            result = []
+            for r in rows:
+                result.append((r["a1"], r["a2"]))
+
+            return result
+
+        except Exception as e:
+            print(f"Errore nella esecuzione della query (read_edges): {e}")
+            return []
+
+        finally:
+            cursor.close()
+            cnx.close()
