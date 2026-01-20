@@ -1,0 +1,92 @@
+from dao import Dao
+import networkx as nx
+
+
+class Model:
+    def __init__(self):
+        self.dao = Dao()
+        self.grafo = None
+
+    def load_nodes(self, durata):
+        """
+        Metodo di appoggio: ritorna gli album filtrati per durata.
+        """
+        lista = self.dao.read_nodes(durata)
+        if len(lista) == 0:
+            print("Lista vuota(model)")
+            return []
+        return lista
+
+    def build_graph(self, durata):
+        """
+        Costruisce un grafo NON orientato:
+        - Nodi = album che hanno durata totale > durata (minuti)
+        - Archi = due album collegati se appaiono insieme in almeno una playlist
+        """
+        lista = self.dao.read_nodes(durata)
+
+        # Se non ho nodi, creo grafo vuoto e ritorno
+        if len(lista) == 0:
+            print("Lista vuota(model, grafo)")
+            self.grafo = nx.Graph()
+            return self.grafo
+
+        # Creo grafo vuoto
+        self.grafo = nx.Graph()
+
+        # 1) Aggiungo NODI con attributi
+        # Ogni nodo ha:
+        # - nome (titolo album)
+        # - durata (in minuti)
+        for n in lista:
+            album_id = n["album_id"]
+            nome = n["title"]
+
+            # durata viene dalla query come numero (può essere float)
+            d = n["durata"]
+            if d is None:
+                d = 0
+            else:
+                d = int(d)
+
+            self.grafo.add_node(album_id, nome=nome, durata=d)
+
+        # 2) Aggiungo ARCHI
+        # Leggo tutte le coppie di album che compaiono insieme in playlist
+        lista2 = self.dao.read_edges()
+
+        # Inserisco l'arco solo se entrambi i nodi esistono nel grafo filtrato
+        for a1, a2 in lista2:
+            if a1 in self.grafo and a2 in self.grafo:
+                self.grafo.add_edge(a1, a2)
+
+        return self.grafo
+
+    def analisi_componente(self, album_id):
+        """
+        Analizza la componente connessa che contiene album_id.
+        Ritorna una lista di tuple (descrizione, valore) per essere stampata in View.
+        """
+        # Controllo grafo creato
+        if self.grafo is None:
+            return [("Errore", "Grafo non creato")]
+
+        # Controllo nodo presente
+        if album_id not in self.grafo:
+            return [("Errore", "Album non presente nel grafo")]
+
+        # nx.node_connected_component ritorna un SET di nodi della componente
+        comp = nx.node_connected_component(self.grafo, album_id)
+
+        # Dimensione componente = numero di nodi
+        dim = len(comp)
+
+        # Durata totale della componente = somma delle durate dei nodi
+        tot_durata = 0
+        for a in comp:
+            tot_durata += self.grafo.nodes[a]["durata"]
+
+        return [
+            ("Dimensione componente", dim),
+            ("Durata totale (min)", tot_durata),
+        ]
