@@ -1,0 +1,115 @@
+from view import View
+from model import Model
+import flet as ft
+
+
+class Controller:
+    def __init__(self, model: Model, view: View):
+        self.model = model
+        self.view = view
+
+    def handle_crea_grafo(self, e):
+        """
+        Evento collegato al bottone "Crea Grafo".
+        1) Legge durata dalla textbox
+        2) Crea il grafo
+        3) Stampa numero nodi e archi
+        4) Riempie la dropdown degli album
+        """
+        durata_txt = self.view.txt_durata.value
+
+        # Controllo input vuoto
+        if durata_txt is None or str(durata_txt).strip() == "":
+            self.view.show_alert("Inserisci una durata.")
+            return
+
+        # Controllo che sia un intero
+        try:
+            durata = int(durata_txt)
+        except ValueError:
+            self.view.show_alert("La durata deve essere un intero.")
+            return
+
+        # Creo grafo (una sola volta)
+        self.model.build_graph(durata)
+
+        # Se grafo vuoto, avviso
+        if self.model.grafo is None or self.model.grafo.number_of_nodes() == 0:
+            self.view.show_alert("Grafo non creato o vuoto.")
+            return
+
+        # Aggiorno la lista_visualizzazione_1 con info grafo
+        self.view.lista_visualizzazione_1.controls.clear()
+        self.view.lista_visualizzazione_1.controls.append(
+            ft.Text(
+                f"Grafo creato: {self.model.grafo.number_of_nodes()} album, "
+                f"{self.model.grafo.number_of_edges()} archi"
+            )
+        )
+
+        # Popolo dropdown album
+        self.populate_dd_album()
+
+        # Aggiorno pagina
+        self.view.update()
+
+    def populate_dd_album(self):
+        """
+        Riempie la dropdown con gli album presenti nel grafo.
+        """
+        self.view.dd_album.options.clear()
+
+        # Scorro tutti i nodi del grafo
+        for album_id in self.model.grafo.nodes():
+            # Prendo il nome dagli attributi del nodo
+            nome = self.model.grafo.nodes[album_id].get("nome", str(album_id))
+
+            # key deve essere stringa perché dropdown lavora bene così
+            self.view.dd_album.options.append(
+                ft.dropdown.Option(key=str(album_id), text=nome)
+            )
+
+        # Reset selezione
+        self.view.dd_album.value = None
+
+    def handle_analisi_comp(self, e):
+        """
+        Evento collegato al bottone "Analisi Componente".
+        1) Legge album selezionato
+        2) Chiama model.analisi_componente
+        3) Stampa i risultati
+        """
+        # Se grafo non esiste, non posso fare analisi
+        if self.model.grafo is None:
+            self.view.show_alert("Prima crea il grafo.")
+            return
+
+        # Se non è stato selezionato nulla
+        if self.view.dd_album.value is None:
+            self.view.show_alert("Seleziona un album.")
+            return
+
+        # Converto album_id in int
+        try:
+            album_id = int(self.view.dd_album.value)
+        except ValueError:
+            self.view.show_alert("Album selezionato non valido.")
+            return
+
+        # Ottengo risultati dal model
+        risultati = self.model.analisi_componente(album_id)
+
+        # Pulisco output precedente
+        self.view.lista_visualizzazione_2.controls.clear()
+
+        # risultati è lista di tuple (descrizione, valore)
+        for descrizione, valore in risultati:
+            self.view.lista_visualizzazione_2.controls.append(
+                ft.Text(f"{descrizione}: {valore}")
+            )
+
+        # Aggiorno pagina
+        self.view.update()
+
+    def handle_get_set_album(self, e):
+        pass
